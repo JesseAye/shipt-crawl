@@ -1,6 +1,6 @@
 ﻿namespace Shipt_Crawler
 {
-	partial class Form1
+	partial class formMain
 	{
 		/// <summary>
 		/// Required designer variable.
@@ -28,13 +28,35 @@
 		/// </summary>
 		private void InitializeComponent()
 		{
-			this.components = new System.ComponentModel.Container();
+			this.btnCrawl = new System.Windows.Forms.Button();
+			this.SuspendLayout();
+			// 
+			// btnCrawl
+			// 
+			this.btnCrawl.Location = new System.Drawing.Point(13, 415);
+			this.btnCrawl.Name = "btnCrawl";
+			this.btnCrawl.Size = new System.Drawing.Size(75, 23);
+			this.btnCrawl.TabIndex = 0;
+			this.btnCrawl.Text = "Start";
+			this.btnCrawl.UseVisualStyleBackColor = true;
+			this.btnCrawl.Click += new System.EventHandler(this.BtnCrawl_Click);
+			// 
+			// formMain
+			// 
+			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
 			this.ClientSize = new System.Drawing.Size(800, 450);
-			this.Text = "Form1";
+			this.Controls.Add(this.btnCrawl);
+			this.Name = "formMain";
+			this.Text = "Shipt Crawl";
+			this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.FormMain_FormClosing);
+			this.ResumeLayout(false);
+
 		}
 
 		#endregion
+
+		private System.Windows.Forms.Button btnCrawl;
 	}
 }
 
