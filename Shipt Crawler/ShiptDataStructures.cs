@@ -15,24 +15,26 @@ namespace Shipt_Crawler
 		public decimal Sale_Price;
 		public decimal Units;
 		public string Unit_Type;
-		public List<string> Promotions;
+		private List<string> PromotionsPrivate;
 		public string Store;
 
+		public List<string> Promotions { get { return PromotionsPrivate ?? new List<string>(); } }
+
 		/// <summary>
-		/// DO NOT "Shipt_Product.Promotions.Add()", Promotions needs to be checked for null.
+		/// Add a promotion to the product
 		/// </summary>
 		/// <param name="promotion">The promotion string to be added</param>
-		/// <returns>Returns true if sucessfully added</returns>
+		/// <returns>Returns true if successfully added</returns>
 		public bool AddPromotion(string promotion)
 		{
 			try
 			{
-				if(Promotions == null)
+				if(PromotionsPrivate == null)
 				{
-					Promotions = new List<string>();
+					PromotionsPrivate = new List<string>();
 				}
 
-				Promotions.Add(promotion);
+				PromotionsPrivate.Add(promotion);
 				return true;
 			}
 
@@ -81,7 +83,7 @@ namespace Shipt_Crawler
 		public string PricePerUnitFormatted()
 		{
 			if (Units <= 0
-				&& (Unit_Type != null || Unit_Type != ""))
+				&& (Unit_Type != null && Unit_Type != ""))
 			{
 				if (Sale_Price <= 0)
 				{
@@ -102,6 +104,53 @@ namespace Shipt_Crawler
 			else
 			{
 				return "0";
+			}
+		}
+
+		public string UnitWithUnitType()
+		{
+			if ((Units > 0)
+				&& ((Unit_Type != null)
+					&& Unit_Type != ""))
+			{
+				return Units + " " + Unit_Type;
+			}
+
+			else
+			{
+				return "";
+			}
+		}
+	}
+
+	public struct Available_Stores
+	{
+		public string Delivery_Address;
+		private List<string> StoreNamesPrivate;
+
+		public List<string> StoreNames { get { return StoreNamesPrivate ?? new List<string>(); } }
+
+		/// <summary>
+		/// Add a store to the delivery address
+		/// </summary>
+		/// <param name="store">The store name to be added</param>
+		/// <returns>Returns true if successfully added</returns>
+		public bool AddStore(string store)
+		{
+			try
+			{
+				if (StoreNamesPrivate == null)
+				{
+					StoreNamesPrivate = new List<string>();
+				}
+
+				StoreNamesPrivate.Add(store);
+				return true;
+			}
+
+			catch (Exception)
+			{
+				throw;
 			}
 		}
 	}

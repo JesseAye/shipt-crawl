@@ -1,8 +1,9 @@
 ﻿using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.Support.UI;
+using SeleniumExtras.WaitHelpers;
 using System;
 using System.Collections.ObjectModel;
-using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
@@ -17,6 +18,8 @@ namespace Shipt_Crawler
 		private bool mainFormIsClosing = false;
 
 		public event EventHandler<Shipt_Product> LandedOnProductPageEvent;
+		public event EventHandler<EventArgs> LeftProductPageEvent;
+		public event EventHandler<Available_Stores> ReportAvailableStoresEvent;
 
 		/// <summary>
 		/// Constructor for formMain, first form of program.
@@ -35,25 +38,126 @@ namespace Shipt_Crawler
 		{
 			if (crawlRunning)
 			{
-				btnCrawl.Text = "Start";
+				btnCrawl.Text = "Start Browser";
 				crawlRequestAbort = true;
 
 				LandedOnProductPageEvent -= FormMain_LandedOnProductPageEvent;
+				ReportAvailableStoresEvent -= FormMain_ReportAvailableStoresEvent;
+				LeftProductPageEvent -= FormMain_LeftProductPageEvent;
 			}
 
 			else
 			{
 				threadCrawl = new Thread(t_Crawl);
 				threadCrawl.Start();
-				btnCrawl.Text = "Stop";
+				btnCrawl.Text = "Stop Browser";
 
 				LandedOnProductPageEvent += FormMain_LandedOnProductPageEvent;
+				ReportAvailableStoresEvent += FormMain_ReportAvailableStoresEvent;
+				LeftProductPageEvent += FormMain_LeftProductPageEvent;
 			}
 		}
 
 		private void FormMain_LandedOnProductPageEvent(object sender, Shipt_Product e)
 		{
-			Console.WriteLine(e);
+			UpdateTextBox(txtbxStore, e.Store);
+			UpdateTextBox(txtbxBrandName, e.Brand_Name);
+			UpdateTextBox(txtbxProductName, e.Product_Name);
+			UpdateTextBox(txtbxRegularPrice, e.Regular_Price.ToString());
+			UpdateTextBox(txtbxSalePrice, e.Sale_Price.ToString());
+			UpdateTextBox(txtbxUnitSize, e.PricePerUnitFormatted());
+
+			// Clear lstbxPromotions and insert any promos if applicable
+			{
+				if (lstbxPromotions.InvokeRequired)
+				{
+					lstbxPromotions.Invoke(new MethodInvoker(() => lstbxPromotions.Items.Clear()));
+				}
+
+				else
+				{
+					lstbxPromotions.Items.Clear();
+				}
+
+				if (e.Promotions.Count > 0)
+				{
+					if (lstbxPromotions.InvokeRequired)
+					{
+						lstbxPromotions.Invoke(new MethodInvoker(() =>
+						{
+							foreach (var promo in e.Promotions)
+							{
+								lstbxPromotions.Items.Add(promo);
+							}
+						}));
+					}
+
+					else
+					{
+						foreach (var promo in e.Promotions)
+						{
+							lstbxPromotions.Items.Add(promo);
+						}
+					}
+				}
+			}
+
+			if (btnTrackItem.InvokeRequired)
+			{
+				btnTrackItem.Invoke(new MethodInvoker(() => btnTrackItem.Enabled = true));
+			}
+
+			else
+			{
+				btnTrackItem.Enabled = true;
+			}
+		}
+
+		/// <summary>
+		/// Updates the value of a text box.
+		/// </summary>
+		/// <param name="textBox">The TextBox class to be updated</param>
+		/// <param name="value">The value to set the Text field of the TextBox</param>
+		private void UpdateTextBox(TextBox textBox, string value)
+		{
+			if (textBox.InvokeRequired)
+			{
+				textBox.Invoke(new MethodInvoker(() => textBox.Text = value));
+			}
+
+			else
+			{
+				textBox.Text = value;
+			}
+		}
+
+		private void FormMain_ReportAvailableStoresEvent(object sender, Available_Stores e)
+		{
+			if (e.StoreNames.Count > 0)
+			{
+				DB_Manager.InsertAddress(e.Delivery_Address);
+				DB_Manager.InsertStores(e);
+			}
+		}
+
+		private void FormMain_LeftProductPageEvent(object sender, EventArgs e)
+		{
+			UpdateTextBox(txtbxStore, string.Empty);
+			UpdateTextBox(txtbxBrandName, string.Empty);
+			UpdateTextBox(txtbxProductName, string.Empty);
+			UpdateTextBox(txtbxRegularPrice, string.Empty);
+			UpdateTextBox(txtbxSalePrice, string.Empty);
+			UpdateTextBox(txtbxUnitSize, string.Empty);
+
+			if (btnTrackItem.InvokeRequired)
+			{
+				btnTrackItem.Invoke(new MethodInvoker(() => btnTrackItem.Enabled = false));
+			}
+
+			else
+			{
+				btnTrackItem.Enabled = false;
+			}
 		}
 
 		private void t_Crawl()
@@ -66,7 +170,7 @@ namespace Shipt_Crawler
 				ChromeDriverService driverService = ChromeDriverService.CreateDefaultService();
 				HtmlAgilityPack.HtmlDocument FullWebPage;
 				String URL_Login = "https://shop.shipt.com/login";
-				String URL_MainPageLoggedIn = "https://shop.shipt.com/";
+				String URL_MainHomePage = "https://shop.shipt.com/";
 				String URL_MainBrowse = "https://shop.shipt.com/search";
 				String URL_Prefix_Product = "https://shop.shipt.com/products/";
 				String URL_Prefix_Featured_Promotion = "https://shop.shipt.com/featured-promotions/";
@@ -75,11 +179,13 @@ namespace Shipt_Crawler
 				chromeOptions.PageLoadStrategy = PageLoadStrategy.Normal;
 				driverService.HideCommandPromptWindow = true;
 
+				// Open Browser
 				using (var browser = new ChromeDriver(driverService, chromeOptions))
 				{
 					browser.Navigate().GoToUrl(URL_Login);
 
-					while (browser.Url != URL_MainPageLoggedIn)
+					// Wait for Url to change from URL_Login to URL_MainHomePage
+					while (browser.Url != URL_MainHomePage)
 					{
 						if(!crawlRequestAbort)
 						{
@@ -92,49 +198,66 @@ namespace Shipt_Crawler
 						}
 					}
 
-					FullWebPage = new HtmlAgilityPack.HtmlDocument();
-					FullWebPage.LoadHtml(browser.PageSource);
-
+					// Let's check if we're logged in by looking for an address in the header of the page
 					bool isLoggedIn = false;
-					try
+					string hasAddressInHeader = browser.FindElements(By.XPath("//a[@class=\"pointer link darkness\"][@href=\"/account/addresses\"]//span")).First().Text;
+					if(!string.IsNullOrEmpty(hasAddressInHeader))
 					{
-						// This is horrible. Something tells me this can go bad really quickly. Please, Shipt, don't change https://shop.shipt.com/ one bit.
-						// It's broken up into single line assignments so when this eventually throws an exception, I can figure out which line is causing it.
-						var node = FullWebPage.DocumentNode.SelectSingleNode("html");
-						node = node.SelectSingleNode("body");
-						node = node.SelectNodes("div").Where(div => div.Attributes["id"].Value == "root").First();
-						node = node.SelectSingleNode("div");
-						node = node.SelectNodes("div").Where(div => div.Attributes["class"].Value.Contains("fixed")).First();
-						node = node.SelectNodes("div").Where(div => div.Attributes["class"].Value.Contains("bg-white-gray")).First();
-						node = node.SelectSingleNode("header");
-						node = node.SelectSingleNode("div");
-						node = node.SelectNodes("a").Where(a => a.Attributes["href"].Value.Contains("addresses")).First();
-						node = node.SelectSingleNode("span");
-
-						if ((node.InnerText != "")
-							&& (node.InnerText != null))
-						{
-							isLoggedIn = true;
-						}
-					}
-
-					catch (NoSuchElementException ex)
-					{
-						MessageBox.Show(ex.Message, "Error verifying logged in status", MessageBoxButtons.OK, MessageBoxIcon.Error);
+						isLoggedIn = true;
 					}
 
 					if (isLoggedIn)
 					{
+						WebDriverWait wait = new WebDriverWait(browser, TimeSpan.FromSeconds(5));
+						wait.PollingInterval = TimeSpan.FromMilliseconds(50);
+
+						// Get the addresses on the account, and the available stores at each address
+						{
+							wait.Until(ExpectedConditions.ElementExists(By.XPath("//button[@data-test=\"ShoppingStoreSelect-storeView\"]"))).Click(); // Trigger event to bring up the Select Store screen
+
+							wait.Until(ExpectedConditions.ElementExists(By.XPath("//button[@id=\"SelectAddress-select\"][@data-test=\"Select-button\"]"))).Click(); // Trigger event to drop down list of addresses
+
+							wait.Until(ExpectedConditions.ElementExists(By.XPath("//li[@data-test=\"Dropdown-option\"]")));
+							int numOfAddresses = browser.FindElements(By.XPath("//li[@data-test=\"Dropdown-option\"]")).Count; // Get count of addresses
+
+							for (int i = 0; i < numOfAddresses; i++)
+							{
+								browser.FindElement(By.XPath("//button[@id=\"SelectAddress-select\"][@data-test=\"Select-button\"]")).Click();
+
+								if (i > 0)
+								{
+									wait.Until(ExpectedConditions.ElementExists(By.XPath("//li[@data-test=\"Dropdown-option\"]")));
+									browser.FindElements(By.XPath("//li[@data-test=\"Dropdown-option\"]"))[i].Click();
+								}
+
+								Available_Stores avail_stores = new Available_Stores();
+								avail_stores.Delivery_Address = browser.FindElement(By.XPath("//div[@id=\"SelectAddress-select-selected-option-label\"]")).Text;
+
+								wait.Until(ExpectedConditions.ElementExists(By.XPath("//div[@class=\"cf\"]")));
+								var Stores = browser.FindElements(By.XPath("//div[@class=\"cf\"]//div//div//p"));
+
+								foreach (var store in Stores)
+								{
+									avail_stores.AddStore(store.Text);
+								}
+
+								// TODO: This event might be causing a huge delay in the program
+								ReportAvailableStoresEvent?.Invoke(this, avail_stores);
+							}
+
+							browser.FindElement(By.XPath("//button[@id=\"SelectAddress-select\"][@data-test=\"Select-button\"]")).Click();
+							browser.FindElements(By.XPath("//li[@data-test=\"Dropdown-option\"]"))[0].Click();
+							browser.FindElement(By.XPath("//button[@data-test=\"Choose Store-modal-close\"]")).Click();
+						}
+
 						string currURL = browser.Url;
 						while(!crawlRequestAbort)
 						{
-							if (currURL != browser.Url)
+							if (currURL != browser.Url) // Check if the URL has changed
 							{
-								// Using hard-coded Thread.Sleep in this case isn't great practice. Check out https://stackoverflow.com/questions/43203243 on having this thread wait until a certain element(s) are visible.
-
+								// If the user navigated to a product page
 								if (browser.Url.Contains(@"shop.shipt.com/products/"))
 								{
-									Thread.Sleep(750);
 									Shipt_Product product = new Shipt_Product();
 
 									/*
@@ -144,17 +267,25 @@ namespace Shipt_Crawler
 									type.GetMethod("Parse").Invoke(null, new object[] { browser.Url.Substring(browser.Url.LastIndexOf("/")) } );
 									*/
 
+									wait.Until(ExpectedConditions.ElementExists(By.XPath("//div[@data-test=\"ProductDetail-product-name\"]")));
+
 									// Product_ID
 									product.Product_ID = uint.Parse(browser.Url.Substring(browser.Url.LastIndexOf("/") + 1));
 
+									// Store
+									if(browser.FindElements(By.XPath("//span[@data-test=\"ShoppingStoreSelect-storeView-storeName\"]")).Count > 0)
+									{
+										product.Store = browser.FindElement(By.XPath("//span[@data-test=\"ShoppingStoreSelect-storeView-storeName\"]")).Text;
+									}
+
 									// Brand_Name if it exists
-									if (browser.FindElement(By.XPath("//span[@data-test=\"ProductDetail-brand-name\"]")) != null)
+									if (browser.FindElements(By.XPath("//span[@data-test=\"ProductDetail-brand-name\"]")).Count > 0)
 									{
 										product.Brand_Name = browser.FindElement(By.XPath("//span[@data-test=\"ProductDetail-brand-name\"]")).Text;
 									}
 
 									// Product_Name
-									if (browser.FindElement(By.XPath("//div[@data-test=\"ProductDetail-product-name\"]")) != null)
+									if (browser.FindElements(By.XPath("//div[@data-test=\"ProductDetail-product-name\"]")).Count > 0)
 									{
 										product.Product_Name = browser.FindElement(By.XPath("//div[@data-test=\"ProductDetail-product-name\"]")).Text;
 									}
@@ -224,21 +355,32 @@ namespace Shipt_Crawler
 									if (browser.FindElements(By.XPath("//div[@data-test=\"ProductDetail-subtext\"]")).Count > 0)
 									{
 										//TODO: Sometimes, subtext looks like "12 ct; 12 fl oz". Do we want to handle this a little differently?
+										//TODO: "1/2 gal" won't parse to decimal.
 										string temp_Subtext = browser.FindElement(By.XPath("//div[@data-test=\"ProductDetail-subtext\"]")).Text;
-										string temp_Units = temp_Subtext.Substring(0, (temp_Subtext.IndexOf(' ')));
-										string temp_UnitType = temp_Subtext.Substring(temp_Subtext.IndexOf(' ') + 1);
 
-										try
+										if (char.IsDigit(temp_Subtext[0]))// TODO: Probably not a good idea to hard-code this
 										{
-											product.Units = Convert.ToDecimal(temp_Units);
+											string temp_Units = temp_Subtext.Substring(0, (temp_Subtext.IndexOf(' '))).Replace("$", "");
+											string temp_UnitType = temp_Subtext.Substring(temp_Subtext.IndexOf(' ') + 1);
+
+											try
+											{
+												product.Units = Convert.ToDecimal(temp_Units);
+											}
+
+											catch (Exception)
+											{
+												throw;
+											}
+
+											product.Unit_Type = temp_UnitType;
 										}
 
-										catch (Exception)
+										else
 										{
-											throw;
+											product.Units = 1;
+											product.Unit_Type = temp_Subtext;
 										}
-
-										product.Unit_Type = temp_UnitType;
 									}
 
 									// If product is BOGO
@@ -247,7 +389,7 @@ namespace Shipt_Crawler
 										product.AddPromotion("Buy 1, Get 1 Free");
 									}
 
-									// If item is within a promotion
+									// If item has a promotion
 									if (browser.FindElements(By.XPath("//button[@data-test=\"ProductDetail-feature-promotion\"]")).Count > 0)
 									{
 										string temp_Promotion = browser.FindElement(By.XPath("//button[@data-test=\"ProductDetail-feature-promotion\"]//div//div")).Text;
@@ -257,63 +399,17 @@ namespace Shipt_Crawler
 									LandedOnProductPageEvent?.Invoke(this, product);
 								}
 
-								currURL = browser.Url;
-								Thread.Sleep(250);
-							}
-						}
-
-						{
-						/*
-						var cookies = browser.Manage().Cookies.AllCookies.Where(cookie => cookie.Name.Contains("shiptAuthData.production")).First().Value;
-						cookies = cookies.Replace("%22", "").Replace(@"{access_token:", "").Substring(0, cookies.IndexOf(@"%2C"));
-
-						HttpWebRequest test = (HttpWebRequest)WebRequest.Create(@"https://api.shipt.com/search/v3/search/?bucket_number=99&white_label_key=shipt");
-						test.Method = "POST";
-						test.Host = "api.shipt.com";
-						test.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:70.0) Gecko/20100101 Firefox/70.0";
-						test.Accept = "*//*";
-						test.Referer = "https://shop.shipt.com/";
-						test.ContentType = "application/json";
-						test.Headers.Add(HttpRequestHeader.Authorization, cookies);
-						test.Headers.Add("Origin", "https://shop.shipt.com");
-						test.Connection = "keep-alive";
-						test.
-						//TODO: check how to apply a body to test, and see if we can fetch json
-
-						test.MaximumAutomaticRedirections = 10;
-						test.MaximumResponseHeadersLength = 10;
-
-						StringBuilder responseString = new StringBuilder();
-
-						try
-						{
-							WebResponse receiveStream = test.GetResponse();
-
-							if (receiveStream != null)
-							{
-								StreamReader readStream = new StreamReader(receiveStream.GetResponseStream(), Encoding.UTF8);
-
-								string line = "";
-
-								while((line = readStream.ReadLine()) != null)
+								// Check if the user left a product page for anything other than a product page
+								else if (currURL.Contains(URL_Prefix_Product)
+											&& !browser.Url.Contains(URL_Prefix_Product))
 								{
-									responseString.Append(line);
+									LeftProductPageEvent?.Invoke(this, new EventArgs());
 								}
 
-								readStream.Close();
+								currURL = browser.Url;
 							}
 						}
-
-						catch (Exception)
-						{
-
-							throw;
-						}
-						*/
-						}
 					}
-
-					//browser.Navigate().GoToUrl(URL_MainBrowse);
 				}
 
 				crawlRequestAbort = false;
@@ -324,12 +420,12 @@ namespace Shipt_Crawler
 					//Set btnCrawl text to "Start"
 					if (btnCrawl.InvokeRequired)
 					{
-						btnCrawl.Invoke(new MethodInvoker(() => btnCrawl.Text = "Start"));
+						btnCrawl.Invoke(new MethodInvoker(() => btnCrawl.Text = "Start Browser"));
 					}
 
 					else
 					{
-						btnCrawl.Text = "Start";
+						btnCrawl.Text = "Start Browser";
 					}
 				}
 			}
@@ -346,12 +442,12 @@ namespace Shipt_Crawler
 					if (btnCrawl.InvokeRequired)
 					{
 						// This seems to lock the application and keep it alive, even though btnCrawl.IsDisposed and btnCrawl.Disposing are false 
-						btnCrawl.Invoke(new MethodInvoker(() => btnCrawl.Text = "Start"));
+						btnCrawl.Invoke(new MethodInvoker(() => btnCrawl.Text = "Start Browser"));
 					}
 
 					else
 					{
-						btnCrawl.Text = "Start";
+						btnCrawl.Text = "Start Browser";
 					}
 				}
 			}
@@ -359,14 +455,17 @@ namespace Shipt_Crawler
 
 		private void FormMain_FormClosing(object sender, FormClosingEventArgs e)
 		{
-			// TODO: Check to make sure this works as intended
-			mainFormIsClosing = true;
-			crawlRequestAbort = true;
-			//threadCrawl.Abort(); This was bad news bears
-
-			while(threadCrawl.ThreadState != ThreadState.Stopped)
+			if (threadCrawl != null)
 			{
-				Thread.Sleep(50);
+				// TODO: Check to make sure this works as intended
+				mainFormIsClosing = true;
+				crawlRequestAbort = true;
+				//threadCrawl.Abort(); This was bad news bears
+
+				while (threadCrawl.ThreadState != ThreadState.Stopped)
+				{
+					Thread.Sleep(50);
+				}
 			}
 		}
 	}
