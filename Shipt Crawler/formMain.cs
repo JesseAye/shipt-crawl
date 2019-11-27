@@ -12,11 +12,27 @@ namespace Shipt_Crawler
 {
 	public partial class formMain : Form
 	{
-		Thread threadCrawl;
-		private bool crawlRunning = false; // Only to be written by the crawling thread, and read from the main (or any other) thread.
-		private bool crawlRequestAbort = false; // Set true by main (or any other) thread, read by the crawling thread, and set false at end of thread.
+		Thread threadBrowser;
+		/// <summary>
+		/// Only to be written by the crawling thread, and read from the main (or any other) thread.
+		/// </summary>
+		private bool browserRunning = false;
+		/// <summary>
+		/// Set true by main (or any other) thread, read by the crawling thread, and set false at end of thread.
+		/// </summary>
+		private bool requestBrowserAbort = false;
+		/// <summary>
+		/// We need this so we don't attempt to modify any of the form's controls.
+		/// </summary>
 		private bool mainFormIsClosing = false;
+		/// <summary>
+		/// If the user is on a product page, this variable stores the information about the product.
+		/// </summary>
+		private Shipt_Product currentProduct;
 
+		/// <summary>
+		/// Whenever the URL of the browser matches the 
+		/// </summary>
 		public event EventHandler<Shipt_Product> LandedOnProductPageEvent;
 		public event EventHandler<EventArgs> LeftProductPageEvent;
 		public event EventHandler<Available_Stores> ReportAvailableStoresEvent;
@@ -30,26 +46,28 @@ namespace Shipt_Crawler
 		}
 
 		/// <summary>
-		/// Ran whenever btnCrawl is clicked
+		/// Either starts the threadBrowser, or ends it.
 		/// </summary>
 		/// <param name="sender"></param>
 		/// <param name="e"></param>
 		private void BtnCrawl_Click(object sender, EventArgs e)
 		{
-			if (crawlRunning)
+			if (browserRunning)
 			{
 				btnCrawl.Text = "Start Browser";
-				crawlRequestAbort = true;
+				requestBrowserAbort = true;
 
 				LandedOnProductPageEvent -= FormMain_LandedOnProductPageEvent;
 				ReportAvailableStoresEvent -= FormMain_ReportAvailableStoresEvent;
 				LeftProductPageEvent -= FormMain_LeftProductPageEvent;
+
+				ClearAllProductFields();
 			}
 
 			else
 			{
-				threadCrawl = new Thread(t_Crawl);
-				threadCrawl.Start();
+				threadBrowser = new Thread(t_Crawl);
+				threadBrowser.Start();
 				btnCrawl.Text = "Stop Browser";
 
 				LandedOnProductPageEvent += FormMain_LandedOnProductPageEvent;
@@ -58,9 +76,15 @@ namespace Shipt_Crawler
 			}
 		}
 
+		/// <summary>
+		/// Whenever the browser lands on a product page, load the info onto the form and into currentProduct variable
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="e">The object containing the product information</param>
 		private void FormMain_LandedOnProductPageEvent(object sender, Shipt_Product e)
 		{
 			UpdateTextBox(txtbxStore, e.Store);
+			UpdateTextBox(txtbxItemNum, e.Product_ID.ToString());
 			UpdateTextBox(txtbxBrandName, e.Brand_Name);
 			UpdateTextBox(txtbxProductName, e.Product_Name);
 			UpdateTextBox(txtbxRegularPrice, e.Regular_Price.ToString());
@@ -111,10 +135,12 @@ namespace Shipt_Crawler
 			{
 				btnTrackItem.Enabled = true;
 			}
+
+			currentProduct = e;
 		}
 
 		/// <summary>
-		/// Updates the value of a text box.
+		/// Checks if invoke is required, then updates the value of a text box accordingly.
 		/// </summary>
 		/// <param name="textBox">The TextBox class to be updated</param>
 		/// <param name="value">The value to set the Text field of the TextBox</param>
@@ -131,6 +157,11 @@ namespace Shipt_Crawler
 			}
 		}
 
+		/// <summary>
+		/// Whenever we browse the addresses and the stores available at that address, insert the address and the stores in the DB
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="e">The object containing the address and available stores</param>
 		private void FormMain_ReportAvailableStoresEvent(object sender, Available_Stores e)
 		{
 			if (e.StoreNames.Count > 0)
@@ -140,14 +171,14 @@ namespace Shipt_Crawler
 			}
 		}
 
+		/// <summary>
+		/// Called when the user is no longer on a product page, we need to empty the TextBoxes and the currentProduct variable
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="e"></param>
 		private void FormMain_LeftProductPageEvent(object sender, EventArgs e)
 		{
-			UpdateTextBox(txtbxStore, string.Empty);
-			UpdateTextBox(txtbxBrandName, string.Empty);
-			UpdateTextBox(txtbxProductName, string.Empty);
-			UpdateTextBox(txtbxRegularPrice, string.Empty);
-			UpdateTextBox(txtbxSalePrice, string.Empty);
-			UpdateTextBox(txtbxUnitSize, string.Empty);
+			ClearAllProductFields();
 
 			if (btnTrackItem.InvokeRequired)
 			{
@@ -160,11 +191,43 @@ namespace Shipt_Crawler
 			}
 		}
 
+		/// <summary>
+		/// Empties all product field TextBoxes on the main form, and clears the currentProduct variable
+		/// </summary>
+		private void ClearAllProductFields()
+		{
+			UpdateTextBox(txtbxStore, string.Empty);
+			UpdateTextBox(txtbxItemNum, string.Empty);
+			UpdateTextBox(txtbxBrandName, string.Empty);
+			UpdateTextBox(txtbxProductName, string.Empty);
+			UpdateTextBox(txtbxRegularPrice, string.Empty);
+			UpdateTextBox(txtbxSalePrice, string.Empty);
+			UpdateTextBox(txtbxUnitSize, string.Empty);
+
+			// Clear lstbxPromotions
+			{
+				if (lstbxPromotions.InvokeRequired)
+				{
+					lstbxPromotions.Invoke(new MethodInvoker(() => lstbxPromotions.Items.Clear()));
+				}
+
+				else
+				{
+					lstbxPromotions.Items.Clear();
+				}
+			}
+
+			currentProduct = new Shipt_Product();
+		}
+
+		/// <summary>
+		/// The thread that controls the browser, and everything relevant to it
+		/// </summary>
 		private void t_Crawl()
 		{
 			try
 			{
-				crawlRunning = true;
+				browserRunning = true;
 
 				ChromeOptions chromeOptions = new ChromeOptions();
 				ChromeDriverService driverService = ChromeDriverService.CreateDefaultService();
@@ -187,7 +250,7 @@ namespace Shipt_Crawler
 					// Wait for Url to change from URL_Login to URL_MainHomePage
 					while (browser.Url != URL_MainHomePage)
 					{
-						if(!crawlRequestAbort)
+						if(!requestBrowserAbort)
 						{
 							Thread.Sleep(100);
 						}
@@ -251,7 +314,7 @@ namespace Shipt_Crawler
 						}
 
 						string currURL = browser.Url;
-						while(!crawlRequestAbort)
+						while(!requestBrowserAbort)
 						{
 							if (currURL != browser.Url) // Check if the URL has changed
 							{
@@ -266,6 +329,8 @@ namespace Shipt_Crawler
 									Type type = product.Product_ID.GetType();
 									type.GetMethod("Parse").Invoke(null, new object[] { browser.Url.Substring(browser.Url.LastIndexOf("/")) } );
 									*/
+
+									product.Address = browser.FindElements(By.XPath("//a[@class=\"pointer link darkness\"][@href=\"/account/addresses\"]//span")).First().Text;
 
 									wait.Until(ExpectedConditions.ElementExists(By.XPath("//div[@data-test=\"ProductDetail-product-name\"]")));
 
@@ -412,8 +477,8 @@ namespace Shipt_Crawler
 					}
 				}
 
-				crawlRequestAbort = false;
-				crawlRunning = false;
+				requestBrowserAbort = false;
+				browserRunning = false;
 
 				if (!mainFormIsClosing)
 				{
@@ -433,8 +498,8 @@ namespace Shipt_Crawler
 			catch (ThreadAbortException)
 			{
 
-				crawlRequestAbort = false;
-				crawlRunning = false;
+				requestBrowserAbort = false;
+				browserRunning = false;
 
 				if (!mainFormIsClosing)
 				{
@@ -455,17 +520,23 @@ namespace Shipt_Crawler
 
 		private void FormMain_FormClosing(object sender, FormClosingEventArgs e)
 		{
-			if (threadCrawl != null)
+			if (threadBrowser != null)
 			{
-				// TODO: Check to make sure this works as intended
 				mainFormIsClosing = true;
-				crawlRequestAbort = true;
-				//threadCrawl.Abort(); This was bad news bears
+				requestBrowserAbort = true;
 
-				while (threadCrawl.ThreadState != ThreadState.Stopped)
+				while (threadBrowser.ThreadState != ThreadState.Stopped)
 				{
 					Thread.Sleep(50);
 				}
+			}
+		}
+
+		private void BtnTrackItem_Click(object sender, EventArgs e)
+		{
+			if (!string.IsNullOrWhiteSpace(currentProduct.Product_ID.ToString()))
+			{
+				DB_Manager.InsertProduct(currentProduct);
 			}
 		}
 	}

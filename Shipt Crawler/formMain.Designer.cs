@@ -44,6 +44,8 @@
 			this.lblPromotions = new System.Windows.Forms.Label();
 			this.txtbxUnitSize = new System.Windows.Forms.TextBox();
 			this.btnTrackItem = new System.Windows.Forms.Button();
+			this.txtbxItemNum = new System.Windows.Forms.TextBox();
+			this.lblItemNum = new System.Windows.Forms.Label();
 			this.SuspendLayout();
 			// 
 			// btnCrawl
@@ -147,7 +149,7 @@
 			this.txtbxStore.Enabled = false;
 			this.txtbxStore.Location = new System.Drawing.Point(93, 12);
 			this.txtbxStore.Name = "txtbxStore";
-			this.txtbxStore.Size = new System.Drawing.Size(272, 20);
+			this.txtbxStore.Size = new System.Drawing.Size(133, 20);
 			this.txtbxStore.TabIndex = 12;
 			// 
 			// lstbxPromotions
@@ -185,12 +187,32 @@
 			this.btnTrackItem.TabIndex = 17;
 			this.btnTrackItem.Text = "Track Item";
 			this.btnTrackItem.UseVisualStyleBackColor = true;
+			this.btnTrackItem.Click += new System.EventHandler(this.BtnTrackItem_Click);
+			// 
+			// txtbxItemNum
+			// 
+			this.txtbxItemNum.Enabled = false;
+			this.txtbxItemNum.Location = new System.Drawing.Point(275, 12);
+			this.txtbxItemNum.Name = "txtbxItemNum";
+			this.txtbxItemNum.Size = new System.Drawing.Size(90, 20);
+			this.txtbxItemNum.TabIndex = 18;
+			// 
+			// lblItemNum
+			// 
+			this.lblItemNum.AutoSize = true;
+			this.lblItemNum.Location = new System.Drawing.Point(232, 15);
+			this.lblItemNum.Name = "lblItemNum";
+			this.lblItemNum.Size = new System.Drawing.Size(37, 13);
+			this.lblItemNum.TabIndex = 19;
+			this.lblItemNum.Text = "Item #";
 			// 
 			// formMain
 			// 
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
 			this.ClientSize = new System.Drawing.Size(377, 265);
+			this.Controls.Add(this.lblItemNum);
+			this.Controls.Add(this.txtbxItemNum);
 			this.Controls.Add(this.btnTrackItem);
 			this.Controls.Add(this.txtbxUnitSize);
 			this.Controls.Add(this.lblPromotions);
@@ -233,6 +255,8 @@
 		private System.Windows.Forms.Label lblPromotions;
 		private System.Windows.Forms.TextBox txtbxUnitSize;
 		private System.Windows.Forms.Button btnTrackItem;
+		private System.Windows.Forms.TextBox txtbxItemNum;
+		private System.Windows.Forms.Label lblItemNum;
 	}
 }
 

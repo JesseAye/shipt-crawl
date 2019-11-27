@@ -17,6 +17,7 @@ namespace Shipt_Crawler
 		public string Unit_Type;
 		private List<string> PromotionsPrivate;
 		public string Store;
+		public string Address;
 
 		public List<string> Promotions { get { return PromotionsPrivate ?? new List<string>(); } }
 

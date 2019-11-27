@@ -4,6 +4,7 @@ using System.Configuration;
 using System.Data;
 using System.Data.SQLite;
 using System.IO;
+using System.Windows.Forms;
 
 namespace Shipt_Crawler
 {
@@ -134,6 +135,119 @@ namespace Shipt_Crawler
 			}
 		}
 
+		public static bool InsertProduct(Shipt_Product product)
+		{
+			if (!DatabaseExists())
+			{
+				CreateDatabase();
+			}
+
+			using (SQLiteConnection connection = new SQLiteConnection(LoadConnectionString()))
+			{
+				int Address_ID = 0;
+				SQLiteCommand QueryAddressID = new SQLiteCommand("SELECT Addresses.id FROM Addresses WHERE (Address LIKE ?)", connection);
+				QueryAddressID.Parameters.AddWithValue("Address", product.Address + "%");
+
+				int Store_ID = 0;
+				SQLiteCommand QueryStoreID = new SQLiteCommand("SELECT Stores.id FROM Stores WHERE (Address_id = ?) AND (Store = ?)", connection);
+
+				SQLiteCommand QueryProductID = new SQLiteCommand("SELECT * FROM Products WHERE (Address_id = ?) AND (Store_id = ?) AND (Product_id = ?)", connection);
+				QueryProductID.Parameters.AddWithValue("Product_id", product.Product_ID);
+
+				SQLiteCommand InsertProduct = new SQLiteCommand("INSERT INTO Products (Address_id, Store_id, Product_id, Brand_Name, Product_Name, Units, Unit_Type, Active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", connection);
+
+				try
+				{
+					connection.Open();
+					SQLiteDataReader AddressReader = QueryAddressID.ExecuteReader();
+
+					// If AddressReader returned at least 1 row
+					if (AddressReader.HasRows)
+					{
+						while (AddressReader.Read())
+						{
+							Address_ID = Convert.ToInt32(AddressReader["id"]);
+
+							if (AddressReader.Read())
+							{
+								MessageBox.Show("While reading the Addresses table, it somehow returned multiple rows for one address. You should have this checked out by a professional!", "Addresses returned multiple rows", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+							}
+
+							AddressReader.Close();
+							break;
+						}
+
+						QueryStoreID.Parameters.AddWithValue("Address_id", Address_ID);
+						QueryStoreID.Parameters.AddWithValue("Store", product.Store);
+
+						SQLiteDataReader StoreReader = QueryStoreID.ExecuteReader();
+
+						// If StoreReader returned at least 1 row
+						if (StoreReader.HasRows)
+						{
+							while (StoreReader.Read())
+							{
+								Store_ID = Convert.ToInt32(StoreReader["id"]);
+
+								if (StoreReader.Read())
+								{
+									MessageBox.Show("While reading the Stores table, it somehow returned multiple rows for one address. You should have this checked out by a professional!", "Addresses returned multiple rows", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+								}
+
+								StoreReader.Close();
+								break;
+							}
+
+							QueryProductID.Parameters.AddWithValue("Address_id", Address_ID);
+							QueryProductID.Parameters.AddWithValue("Store_id", Store_ID);
+
+							SQLiteDataReader ProductReader = QueryProductID.ExecuteReader();
+
+							// If ProductReader returned at least 1 row, then the product is already being tracked
+							if (ProductReader.HasRows)
+							{
+								// TODO: Handle the case when a product already exists in the Products table
+								ProductReader.Close();
+							}
+
+							// The product does not yet exist
+							else
+							{
+								InsertProduct.Parameters.AddWithValue("Address_id", Address_ID);
+								InsertProduct.Parameters.AddWithValue("Store_id", Store_ID);
+								InsertProduct.Parameters.AddWithValue("Product_id", product.Product_ID);
+								InsertProduct.Parameters.AddWithValue("Brand_Name", product.Brand_Name);
+								InsertProduct.Parameters.AddWithValue("Product_Name", product.Product_Name);
+								InsertProduct.Parameters.AddWithValue("Units", product.Units);
+								InsertProduct.Parameters.AddWithValue("Unit_Type", product.Unit_Type);
+								InsertProduct.Parameters.AddWithValue("Active", "True");
+								InsertProduct.ExecuteNonQuery();
+							}
+						}
+					}
+
+
+					return true;
+				}
+
+				catch (Exception ex)
+				{
+					Console.WriteLine(ex.Message);
+					return false;
+				}
+
+				finally
+				{
+					connection.Close();
+				}
+			}
+		}
+
+		/// <summary>
+		/// Creates a new database to store data
+		/// </summary>
+		/// <param name="FilePath">The filepath where the Database file is located</param>
+		/// <returns></returns>
 		private static bool CreateDatabase(string FilePath = DefaultDatabaseFile)
 		{
 			using (SQLiteConnection connection = new SQLiteConnection(LoadConnectionString()))
