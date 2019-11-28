@@ -66,7 +66,7 @@ namespace Shipt_Crawler
 		/// <summary>
 		/// Whenever the user is first logged in, the browser will check the delivery addresses and stores available.
 		/// </summary>
-		public event EventHandler<Available_Stores> ReportAvailableStoresEvent;
+		public event EventHandler<Shipt_Available_Stores> ReportAvailableStoresEvent;
 		#endregion
 
 		#region Form Methods
@@ -142,6 +142,17 @@ namespace Shipt_Crawler
 			}
 		}
 
+		private void TrackedProductsToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			formTrackedProducts TrackedProducts = new formTrackedProducts();
+			TrackedProducts.ShowDialog();
+		}
+
+		private void CrawlPricesToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+
+		}
+
 		#endregion
 
 		#region Custom Event Methods
@@ -214,7 +225,7 @@ namespace Shipt_Crawler
 		/// </summary>
 		/// <param name="sender"></param>
 		/// <param name="e">The object containing the address and available stores</param>
-		private void FormMain_ReportAvailableStoresEvent(object sender, Available_Stores e)
+		private void FormMain_ReportAvailableStoresEvent(object sender, Shipt_Available_Stores e)
 		{
 			if (e.StoreNames.Count > 0)
 			{
@@ -361,7 +372,7 @@ namespace Shipt_Crawler
 									browser.FindElements(By.XPath("//li[@data-test=\"Dropdown-option\"]"))[i].Click();
 								}
 
-								Available_Stores avail_stores = new Available_Stores();
+								Shipt_Available_Stores avail_stores = new Shipt_Available_Stores();
 								avail_stores.Delivery_Address = browser.FindElement(By.XPath("//div[@id=\"SelectAddress-select-selected-option-label\"]")).Text;
 
 								wait.Until(ExpectedConditions.ElementExists(By.XPath("//div[@class=\"cf\"]")));
@@ -587,5 +598,6 @@ namespace Shipt_Crawler
 		}
 
 		#endregion
+
 	}
 }

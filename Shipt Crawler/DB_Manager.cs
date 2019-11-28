@@ -19,7 +19,7 @@ namespace Shipt_Crawler
 
 		#region Methods
 
-		#region Insert
+		#region Create
 		/// <summary>
 		/// Add a new delivery address to the Addresses table.
 		/// </summary>
@@ -44,15 +44,18 @@ namespace Shipt_Crawler
 				try
 				{
 					connection.Open();
-					SQLiteDataReader reader = QueryAddressID.ExecuteReader();
 
-					while (reader.Read()) // If QueryAddressID has any rows, then the address is already in the DB
+					// If Address already exists in Database
+					if (FindAddress_id(connection, address) > 0)
 					{
 						return false;
 					}
 
-					command.ExecuteNonQuery();
-					return true;
+					else
+					{
+						command.ExecuteNonQuery();
+						return true;
+					}
 				}
 
 				catch (Exception ex)
@@ -75,7 +78,7 @@ namespace Shipt_Crawler
 		/// </summary>
 		/// <param name="stores">The address and stores to be added.</param>
 		/// <returns>True if successfully added.</returns>
-		public static bool InsertStores(Available_Stores stores)
+		public static bool InsertStores(Shipt_Available_Stores stores)
 		{
 			if (!DatabaseExists())
 			{
@@ -85,8 +88,6 @@ namespace Shipt_Crawler
 			using (SQLiteConnection connection = new SQLiteConnection(LoadConnectionString()))
 			{
 				int Address_ID;
-				SQLiteCommand QueryAddressID = new SQLiteCommand("SELECT Addresses.id FROM Addresses WHERE (Address = ?)", connection);
-				QueryAddressID.Parameters.AddWithValue("Address", stores.Delivery_Address);
 
 				SQLiteCommand QueryStores = new SQLiteCommand("SELECT Stores.Store FROM Stores WHERE (Address_id = ?)", connection);
 
@@ -98,17 +99,17 @@ namespace Shipt_Crawler
 				try
 				{
 					connection.Open();
-					SQLiteDataReader reader = QueryAddressID.ExecuteReader();
-					reader.Read();
-					bool ValidStoreID = int.TryParse(reader["id"].ToString(), out Address_ID);
-					reader.Close();
 
-					if (ValidStoreID)
+					Address_ID = FindAddress_id(connection, stores.Delivery_Address);
+
+					if (Address_ID > 0)
 					{
+						command.Parameters["Address_id"].Value = Address_ID;
+
 						List<string> modifiedStores = stores.StoreNames;
 
 						QueryStores.Parameters.AddWithValue("Address_id", Address_ID);
-						reader = QueryStores.ExecuteReader();
+						SQLiteDataReader reader = QueryStores.ExecuteReader();
 
 						// Take out any existing stores from modifiedStores so we don't spend time adding rows that already exist
 						while (reader.Read())
@@ -121,7 +122,6 @@ namespace Shipt_Crawler
 
 						foreach (string store in modifiedStores)
 						{
-							command.Parameters["Address_id"].Value = Address_ID;
 							command.Parameters["Store"].Value = store;
 							command.Parameters["Active"].Value = "True";
 							command.ExecuteNonQuery();
@@ -139,7 +139,6 @@ namespace Shipt_Crawler
 				finally
 				{
 					connection.Close();
-					QueryAddressID.Dispose();
 					command.Dispose();
 				}
 			}
@@ -209,7 +208,7 @@ namespace Shipt_Crawler
 
 								if (StoreReader.Read())
 								{
-									MessageBox.Show("While reading the Stores table, it somehow returned multiple rows for one address. You should have this checked out by a professional!", "Addresses returned multiple rows", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+									MessageBox.Show("While reading the Stores table, it somehow returned multiple rows for one address and store. You should have this checked out by a professional!", "Stores returned multiple rows", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 								}
 
 								StoreReader.Close();
@@ -260,6 +259,142 @@ namespace Shipt_Crawler
 				}
 			}
 		}
+		#endregion
+
+		#region Read
+
+		/// <summary>
+		/// (Will) Returns a list of Shipt_Products from the Products table.
+		/// </summary>
+		/// <param name="fromAddress">Filter by Address_id</param>
+		/// <param name="fromStore">Filter by Store_id</param>
+		public static void ReadProducts(string fromAddress = null, string fromStore = null)
+		{
+			SQLiteCommand QueryProducts;
+
+			using (SQLiteConnection connection = new SQLiteConnection(LoadConnectionString()))
+			{
+
+				try
+				{
+					connection.Open();
+
+					// If a certain address is specified
+					if (!string.IsNullOrWhiteSpace(fromAddress))
+					{
+						int Address_id = FindAddress_id(connection, fromAddress);
+
+						// If a certain address AND store is specified
+						if (!string.IsNullOrWhiteSpace(fromStore))
+						{
+							int Store_id = FindStore_id(connection, fromStore, Address_id);
+							QueryProducts = new SQLiteCommand("SELECT * FROM Products WHERE (Address_id = ?) AND (Store_id = ?)", connection);
+							QueryProducts.Parameters.AddWithValue("Address_id", Address_id);
+							QueryProducts.Parameters.AddWithValue("Store_id", Store_id);
+						}
+
+						// If only a certain address is specified
+						else
+						{
+							QueryProducts = new SQLiteCommand("SELECT * FROM Products WHERE (Address_id = ?)", connection);
+							QueryProducts.Parameters.AddWithValue("Address_id", Address_id);
+						}
+					}
+
+					// If no address and store is specified
+					else
+					{
+						QueryProducts = new SQLiteCommand("SELECT * FROM Products", connection);
+					}
+
+					connection.Close();
+				}
+
+				catch (Exception)
+				{
+
+					throw;
+				}
+			}
+		}
+
+		/// <summary>
+		/// Uses the <paramref name="connection"/> to query the Addresses table for a specific Address_id.
+		/// </summary>
+		/// <param name="connection">The OPENED connection to use.</param>
+		/// <param name="Address">The Addresses.Address to query with.</param>
+		/// <returns></returns>
+		private static int FindAddress_id(SQLiteConnection connection, string Address)
+		{
+			if (connection.State == ConnectionState.Open)
+			{
+				if (!string.IsNullOrWhiteSpace(Address))
+				{
+					SQLiteCommand QueryAddressID = new SQLiteCommand("SELECT Addresses.id FROM Addresses WHERE (Address LIKE ?)", connection);
+					QueryAddressID.Parameters.AddWithValue("Address", Address + "%");
+
+					SQLiteDataReader reader = QueryAddressID.ExecuteReader();
+					if (reader.HasRows)
+					{
+						while (reader.Read())
+						{
+							int Address_ID = Convert.ToInt32(reader["id"]);
+
+							if (reader.Read())
+							{
+								MessageBox.Show("While reading the Addresses table, it somehow returned multiple rows for one address. You should have this checked out by a professional!", "Addresses returned multiple rows", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+							}
+
+							reader.Close();
+							return Address_ID;
+						}
+					}
+				}
+			}
+
+			return 0;
+		}
+
+		/// <summary>
+		/// Uses the connection to query the Stores table for a specific Stores.id.
+		/// </summary>
+		/// <param name="connection">he OPENED connection to use.</param>
+		/// <param name="Store">The Stores.Store to query with.</param>
+		/// <param name="Address_id">The Addresses.id to query with.</param>
+		/// <returns></returns>
+		private static int FindStore_id(SQLiteConnection connection, string Store, int Address_id)
+		{
+			if (connection.State == ConnectionState.Open)
+			{
+				if ((!string.IsNullOrWhiteSpace(Store))
+					&& (Address_id > 0))
+				{
+					SQLiteCommand QueryStoreID = new SQLiteCommand("SELECT Stores.id FROM Stores WHERE (Address_id = ?) AND (Store = ?)", connection);
+					QueryStoreID.Parameters.AddWithValue("Address_id", Address_id);
+					QueryStoreID.Parameters.AddWithValue("Store", Store);
+
+					SQLiteDataReader reader = QueryStoreID.ExecuteReader();
+					if (reader.HasRows)
+					{
+						while (reader.Read())
+						{
+							int Store_id = Convert.ToInt32(reader["id"]);
+
+							if (reader.Read())
+							{
+								MessageBox.Show("While reading the Stores table, it somehow returned multiple rows for one address and Store. You should have this checked out by a professional!", "Stores returned multiple rows", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+							}
+
+							reader.Close();
+							return Store_id;
+						}
+					}
+				}
+			}
+
+			return 0;
+		}
+
 		#endregion
 
 		/// <summary>
@@ -356,9 +491,5 @@ CREATE TABLE IF NOT EXISTS Products (
 			return @"Data Source=" + @FilePath + @";Version=3;";
 		}
 		#endregion
-
-		// NOTE: For methods such as InsertProduct, I decided to have the multiple SELECT queries housed inside the one method instead of breaking them up
-		//		 into seperate methods to potentially reduce the overhead of repeatedly opening and closing the connection to the database file.
-		//		 Whether the savings are marginal or not is another story.
 	}
 }

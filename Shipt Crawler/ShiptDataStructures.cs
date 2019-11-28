@@ -171,7 +171,7 @@ namespace Shipt_Crawler
 	/// <summary>
 	/// Stores the delivery address and the applicable stores available for that address.
 	/// </summary>
-	public struct Available_Stores
+	public struct Shipt_Available_Stores
 	{
 		#region Variables
 		/// <summary>
