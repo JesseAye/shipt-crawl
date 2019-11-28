@@ -12,6 +12,31 @@ namespace Shipt_Crawler
 {
 	public partial class formMain : Form
 	{
+		#region Variables
+		/// <summary>
+		/// The login page to Shipt.
+		/// </summary>
+		readonly String URL_Login = "https://shop.shipt.com/login";
+		/// <summary>
+		/// The home page to Shipt (Should be checked for equivalency, not if the URL contains this string)
+		/// </summary>
+		readonly String URL_MainHomePage = "https://shop.shipt.com/";
+		/// <summary>
+		/// Check equivalency for browsing unfiltered, check if URL contains this for any type of (un)filtered browsing.
+		/// </summary>
+		readonly String URL_MainBrowse = "https://shop.shipt.com/search";
+		/// <summary>
+		/// The prefix for a product page
+		/// </summary>
+		readonly String URL_Prefix_Product = "https://shop.shipt.com/products/";
+		/// <summary>
+		/// The prefix for a featured promotion page.
+		/// </summary>
+		readonly String URL_Prefix_Featured_Promotion = "https://shop.shipt.com/featured-promotions/";
+
+		/// <summary>
+		/// The thread that the browser and everything relevant to it is ran on.
+		/// </summary>
 		Thread threadBrowser;
 		/// <summary>
 		/// Only to be written by the crawling thread, and read from the main (or any other) thread.
@@ -31,11 +56,20 @@ namespace Shipt_Crawler
 		private Shipt_Product currentProduct;
 
 		/// <summary>
-		/// Whenever the URL of the browser matches the 
+		/// Whenever the URL of the browser matches the <paramref name="URL_Prefix_Product"/>, user should be on a product page.
 		/// </summary>
 		public event EventHandler<Shipt_Product> LandedOnProductPageEvent;
+		/// <summary>
+		/// Whenever the previous URL matched <paramref name="URL_Prefix_Product"/>, but is now on any page other than <paramref name="URL_Prefix_Product"/>.
+		/// </summary>
 		public event EventHandler<EventArgs> LeftProductPageEvent;
+		/// <summary>
+		/// Whenever the user is first logged in, the browser will check the delivery addresses and stores available.
+		/// </summary>
 		public event EventHandler<Available_Stores> ReportAvailableStoresEvent;
+		#endregion
+
+		#region Form Methods
 
 		/// <summary>
 		/// Constructor for formMain, first form of program.
@@ -75,6 +109,42 @@ namespace Shipt_Crawler
 				LeftProductPageEvent += FormMain_LeftProductPageEvent;
 			}
 		}
+
+		/// <summary>
+		/// The user is closing the form. Check if we need to close <paramref name="threadBrowser"/> before exiting.
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="e"></param>
+		private void FormMain_FormClosing(object sender, FormClosingEventArgs e)
+		{
+			if (threadBrowser != null)
+			{
+				mainFormIsClosing = true;
+				requestBrowserAbort = true;
+
+				while (threadBrowser.ThreadState != ThreadState.Stopped)
+				{
+					Thread.Sleep(50);
+				}
+			}
+		}
+
+		/// <summary>
+		/// If <paramref name="currentProduct"/> is not null or whitespace, attempt to insert that product to DB.
+		/// </summary>
+		/// <param name="sender"></param>
+		/// <param name="e"></param>
+		private void BtnTrackItem_Click(object sender, EventArgs e)
+		{
+			if (!string.IsNullOrWhiteSpace(currentProduct.Product_ID.ToString()))
+			{
+				DB_Manager.InsertProduct(currentProduct);
+			}
+		}
+
+		#endregion
+
+		#region Custom Event Methods
 
 		/// <summary>
 		/// Whenever the browser lands on a product page, load the info onto the form and into currentProduct variable
@@ -140,24 +210,6 @@ namespace Shipt_Crawler
 		}
 
 		/// <summary>
-		/// Checks if invoke is required, then updates the value of a text box accordingly.
-		/// </summary>
-		/// <param name="textBox">The TextBox class to be updated</param>
-		/// <param name="value">The value to set the Text field of the TextBox</param>
-		private void UpdateTextBox(TextBox textBox, string value)
-		{
-			if (textBox.InvokeRequired)
-			{
-				textBox.Invoke(new MethodInvoker(() => textBox.Text = value));
-			}
-
-			else
-			{
-				textBox.Text = value;
-			}
-		}
-
-		/// <summary>
 		/// Whenever we browse the addresses and the stores available at that address, insert the address and the stores in the DB
 		/// </summary>
 		/// <param name="sender"></param>
@@ -188,6 +240,27 @@ namespace Shipt_Crawler
 			else
 			{
 				btnTrackItem.Enabled = false;
+			}
+		}
+
+		#endregion
+
+		#region Methods
+		/// <summary>
+		/// Checks if invoke is required, then updates the value of a text box accordingly.
+		/// </summary>
+		/// <param name="textBox">The TextBox class to be updated</param>
+		/// <param name="value">The value to set the Text field of the TextBox</param>
+		private void UpdateTextBox(TextBox textBox, string value)
+		{
+			if (textBox.InvokeRequired)
+			{
+				textBox.Invoke(new MethodInvoker(() => textBox.Text = value));
+			}
+
+			else
+			{
+				textBox.Text = value;
 			}
 		}
 
@@ -232,11 +305,6 @@ namespace Shipt_Crawler
 				ChromeOptions chromeOptions = new ChromeOptions();
 				ChromeDriverService driverService = ChromeDriverService.CreateDefaultService();
 				HtmlAgilityPack.HtmlDocument FullWebPage;
-				String URL_Login = "https://shop.shipt.com/login";
-				String URL_MainHomePage = "https://shop.shipt.com/";
-				String URL_MainBrowse = "https://shop.shipt.com/search";
-				String URL_Prefix_Product = "https://shop.shipt.com/products/";
-				String URL_Prefix_Featured_Promotion = "https://shop.shipt.com/featured-promotions/";
 
 				//chromeOptions.AddArguments("headless");
 				chromeOptions.PageLoadStrategy = PageLoadStrategy.Normal;
@@ -518,26 +586,6 @@ namespace Shipt_Crawler
 			}
 		}
 
-		private void FormMain_FormClosing(object sender, FormClosingEventArgs e)
-		{
-			if (threadBrowser != null)
-			{
-				mainFormIsClosing = true;
-				requestBrowserAbort = true;
-
-				while (threadBrowser.ThreadState != ThreadState.Stopped)
-				{
-					Thread.Sleep(50);
-				}
-			}
-		}
-
-		private void BtnTrackItem_Click(object sender, EventArgs e)
-		{
-			if (!string.IsNullOrWhiteSpace(currentProduct.Product_ID.ToString()))
-			{
-				DB_Manager.InsertProduct(currentProduct);
-			}
-		}
+		#endregion
 	}
 }

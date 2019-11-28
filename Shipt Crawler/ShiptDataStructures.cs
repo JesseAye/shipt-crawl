@@ -6,26 +6,65 @@ using System.Threading.Tasks;
 
 namespace Shipt_Crawler
 {
+	/// <summary>
+	/// Stores the information regarding a product.
+	/// </summary>
 	public struct Shipt_Product
 	{
+		#region Variables
+		/// <summary>
+		/// The ID of the product, usually in reference to the number of the product in the URL.
+		/// </summary>
 		public UInt32 Product_ID;
+		/// <summary>
+		/// The brand name of the product if it has a brand.
+		/// </summary>
 		public string Brand_Name;
+		/// <summary>
+		/// The product name.
+		/// </summary>
 		public string Product_Name;
+		/// <summary>
+		/// The regular price of the product.
+		/// </summary>
 		public decimal Regular_Price;
+		/// <summary>
+		/// The sale price of the product if applicable.
+		/// </summary>
 		public decimal Sale_Price;
+		/// <summary>
+		/// Attempts to reference the numerical weight/size/quantity of the product.
+		/// </summary>
 		public decimal Units;
+		/// <summary>
+		/// Attempts to reference the type of weight/size/quantity of the product (oz, per lb, cans, etc).
+		/// </summary>
 		public string Unit_Type;
+		/// <summary>
+		/// The list of promotions currently applicable to the product.
+		/// </summary>
 		private List<string> PromotionsPrivate;
+		/// <summary>
+		/// The store name the product exists in.
+		/// </summary>
 		public string Store;
+		/// <summary>
+		/// The address the store delivers to.
+		/// </summary>
 		public string Address;
+		#endregion
 
+		#region Methods
+		/// <summary>
+		/// Returns the list of promotions currently applicable to the product.
+		/// </summary>
 		public List<string> Promotions { get { return PromotionsPrivate ?? new List<string>(); } }
 
 		/// <summary>
-		/// Add a promotion to the product
+		/// Add a promotion to the product.
 		/// </summary>
-		/// <param name="promotion">The promotion string to be added</param>
-		/// <returns>Returns true if successfully added</returns>
+		/// <param name="promotion">The promotion string to be added.</param>
+		/// <returns>Returns true if successfully added.</returns>
 		public bool AddPromotion(string promotion)
 		{
 			try
@@ -108,6 +147,10 @@ namespace Shipt_Crawler
 			}
 		}
 
+		/// <summary>
+		/// Combines <paramref name="Units"/> and <paramref name="Unit_Type"/>.
+		/// </summary>
+		/// <returns>If <paramref name="Units"/> and <paramref name="Unit_Type"/> are valid strings, returns concatenated. Else returns empty string.</returns>
 		public string UnitWithUnitType()
 		{
 			if ((Units > 0)
@@ -119,23 +162,39 @@ namespace Shipt_Crawler
 
 			else
 			{
-				return "";
+				return string.Empty;
 			}
 		}
+		#endregion
 	}
 
+	/// <summary>
+	/// Stores the delivery address and the applicable stores available for that address.
+	/// </summary>
 	public struct Available_Stores
 	{
+		#region Variables
+		/// <summary>
+		/// The full delivery address as gathered from the ChooseStore-form.
+		/// </summary>
 		public string Delivery_Address;
+		/// <summary>
+		/// The list of store names available at the <paramref name="Delivery_Address"/>.
+		/// </summary>
 		private List<string> StoreNamesPrivate;
+		#endregion
 
+		#region Methods
+		/// <summary>
+		/// Returns the list of store names currently applicable to the <paramref name="Delivery_Address"/>.
+		/// </summary>
 		public List<string> StoreNames { get { return StoreNamesPrivate ?? new List<string>(); } }
 
 		/// <summary>
-		/// Add a store to the delivery address
+		/// Add a store for the <paramref name="Delivery_Address"/>.
 		/// </summary>
-		/// <param name="store">The store name to be added</param>
-		/// <returns>Returns true if successfully added</returns>
+		/// <param name="store">The store name to be added<./param>
+		/// <returns>Returns true if successfully added.</returns>
 		public bool AddStore(string store)
 		{
 			try
@@ -154,5 +213,6 @@ namespace Shipt_Crawler
 				throw;
 			}
 		}
+		#endregion
 	}
 }

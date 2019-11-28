@@ -10,16 +10,24 @@ namespace Shipt_Crawler
 {
 	class DB_Manager
 	{
-		private const string DefaultDatabaseFile = @".\Database.db";
-
+		#region Variables
 		/// <summary>
-		/// Add a new delivery address to the database
+		/// The default file path for the .db file.
 		/// </summary>
-		/// <param name="address">The address to be added</param>
-		/// <returns>True if successfully added</returns>
+		private const string DefaultDatabaseFile = @".\Database.db";
+		#endregion
+
+		#region Methods
+
+		#region Insert
+		/// <summary>
+		/// Add a new delivery address to the Addresses table.
+		/// </summary>
+		/// <param name="address">The address to be added.</param>
+		/// <returns>True if successfully added.</returns>
 		public static bool InsertAddress(string address)
 		{
-			if(!DatabaseExists())
+			if (!DatabaseExists())
 			{
 				CreateDatabase();
 			}
@@ -38,7 +46,7 @@ namespace Shipt_Crawler
 					connection.Open();
 					SQLiteDataReader reader = QueryAddressID.ExecuteReader();
 
-					while(reader.Read()) // If QueryAddressID has any rows, then the address is already in the DB
+					while (reader.Read()) // If QueryAddressID has any rows, then the address is already in the DB
 					{
 						return false;
 					}
@@ -61,10 +69,12 @@ namespace Shipt_Crawler
 		}
 
 		/// <summary>
-		/// Add new stores to the database
+		/// Add new stores to the Stores table.<para/>
+		/// Query's the Addresses table for a match for use at Stores.Address_id.<para/>
+		/// Query's the Stores table for existing Stores.id and Stores.Address_id.
 		/// </summary>
-		/// <param name="stores"></param>
-		/// <returns></returns>
+		/// <param name="stores">The address and stores to be added.</param>
+		/// <returns>True if successfully added.</returns>
 		public static bool InsertStores(Available_Stores stores)
 		{
 			if (!DatabaseExists())
@@ -93,7 +103,7 @@ namespace Shipt_Crawler
 					bool ValidStoreID = int.TryParse(reader["id"].ToString(), out Address_ID);
 					reader.Close();
 
-					if(ValidStoreID)
+					if (ValidStoreID)
 					{
 						List<string> modifiedStores = stores.StoreNames;
 
@@ -103,7 +113,7 @@ namespace Shipt_Crawler
 						// Take out any existing stores from modifiedStores so we don't spend time adding rows that already exist
 						while (reader.Read())
 						{
-							if(modifiedStores.Contains(reader[0].ToString()))
+							if (modifiedStores.Contains(reader[0].ToString()))
 							{
 								modifiedStores.Remove(reader[0].ToString());
 							}
@@ -135,6 +145,14 @@ namespace Shipt_Crawler
 			}
 		}
 
+		/// <summary>
+		/// Add new product to the Products table.<para/>
+		/// Query's the Addresses table for a match for use at Stores.Address_id and Products.Address_id.<para/>
+		/// Query's the Stores table for a match for use at Products.Store_id.<para/>
+		/// Query's the Products table for existing Products.Address_id, Products.Store_id, and Products.Product_id.
+		/// </summary>
+		/// <param name="product"></param>
+		/// <returns></returns>
 		public static bool InsertProduct(Shipt_Product product)
 		{
 			if (!DatabaseExists())
@@ -242,6 +260,7 @@ namespace Shipt_Crawler
 				}
 			}
 		}
+		#endregion
 
 		/// <summary>
 		/// Creates a new database to store data
@@ -336,5 +355,10 @@ CREATE TABLE IF NOT EXISTS Products (
 		{
 			return @"Data Source=" + @FilePath + @";Version=3;";
 		}
+		#endregion
+
+		// NOTE: For methods such as InsertProduct, I decided to have the multiple SELECT queries housed inside the one method instead of breaking them up
+		//		 into seperate methods to potentially reduce the overhead of repeatedly opening and closing the connection to the database file.
+		//		 Whether the savings are marginal or not is another story.
 	}
 }
